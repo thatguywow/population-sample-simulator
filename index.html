@@ -1,443 +1,434 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Population Simulator — Static</title>
-  <style>
-    :root{
-      --bg:#f6f7fb; --card:#ffffff; --muted:#6b7280; --accent:#0f62fe;
-      --radius:10px; --pad:14px;
-    }
-    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;background:var(--bg);color:#0f1724}
-    .wrap{max-width:980px;margin:28px auto;padding:16px}
-    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
-    header h1{font-size:20px;margin:0}
-    .card{background:var(--card);border-radius:var(--radius);padding:var(--pad);box-shadow:0 6px 18px rgba(16,24,40,0.06);margin-bottom:12px}
-    label{display:block;margin-top:8px;font-size:14px;color:#0f1724}
-    input[type="number"], select, input[type="file"], textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #e6e9ef;margin-top:6px;box-sizing:border-box}
-    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-    .btn{padding:10px 14px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
-    .btn.secondary{background:#10b981}
-    .muted{color:var(--muted);font-size:13px}
-    pre#out{background:#0b1220;color:#e6eef8;padding:12px;border-radius:8px;overflow:auto;white-space:pre-wrap;word-break:break-word}
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    table th,table td{padding:8px;border-bottom:1px solid #f1f5f9;text-align:left}
-    .flex-sb{display:flex;justify-content:space-between;align-items:center}
-    .warning{background:#fff4e5;color:#7a4900;padding:8px;border-radius:8px;margin-top:8px}
-    footer{margin-top:18px;text-align:center;color:var(--muted);font-size:13px}
-    @media (max-width:540px){header h1{font-size:18px}}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Population % Simulator — Tank Top Example</title>
+<style>
+  :root{--bg:#f6f7fb;--card:#fff;--muted:#6b7280;--accent:#0366d6}
+  body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0;background:var(--bg);color:#0b1220}
+  .wrap{max-width:980px;margin:20px auto;padding:14px}
+  .card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 20px rgba(16,24,40,0.06);margin-bottom:12px}
+  h1{margin:0 0 6px 0;font-size:20px}
+  label{display:block;margin-top:8px;font-weight:600}
+  input,select,textarea{width:100%;padding:10px;margin-top:6px;border-radius:8px;border:1px solid #e6e9ef;box-sizing:border-box}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .col{flex:1;min-width:120px}
+  .btn{display:inline-block;padding:10px 14px;border-radius:8px;border:0;background:var(--accent);color:white;cursor:pointer}
+  .muted{color:var(--muted);font-size:13px}
+  pre{background:#0b1220;color:#e6eef8;padding:12px;border-radius:8px;overflow:auto}
+  .small{font-size:13px;color:var(--muted)}
+  .results{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px}
+  .tile{background:#f8fafc;padding:10px;border-radius:8px;min-width:160px}
+  a.link{color:var(--accent)}
+  footer{font-size:13px;color:var(--muted);text-align:center;margin-top:8px}
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Population Simulator (static)</h1>
-      <div class="muted">Client-side demo • No backend required</div>
-    </header>
-
-    <div class="card">
-      <div class="flex-sb">
-        <div>
-          <label>Mode</label>
-          <select id="mode">
-            <option value="demo">Demo generator (browser)</option>
-            <option value="ipf">IPF / Raking (upload marginals CSV)</option>
-          </select>
-        </div>
-
-        <div style="min-width:160px">
-          <label>Rows to generate</label>
-          <input type="number" id="nrows" min="1" max="100000" value="500" />
-        </div>
-      </div>
-
-      <label style="margin-top:12px">Upload CSV (for IPF)
-        <input id="file" type="file" accept=".csv" />
-      </label>
-      <div class="muted" style="margin-top:6px">
-        IPF CSV must be <strong>tall</strong> with headers: <code>axis,category,value</code> (case-insensitive).
-        Example row: <code>age,25-34,220000</code>
-      </div>
-
-      <div class="controls">
-        <button id="generateBtn" class="btn">Generate</button>
-        <button id="downloadBtn" class="btn secondary">Download CSV</button>
-        <button id="copyBtn" class="btn" style="background:#475569">Copy JSON</button>
-      </div>
-
-      <div id="warnArea"></div>
-    </div>
-
-    <div class="card">
-      <h3>Generated preview</h3>
-      <div id="stats" class="muted" style="margin-bottom:8px">No generation yet.</div>
-      <pre id="out">No output yet.</pre>
-      <div id="tableWrap" style="margin-top:12px"></div>
-    </div>
-
-    <div class="card">
-      <h3>Notes & tips</h3>
-      <ul class="muted">
-        <li>Demo mode produces plausible-looking rows but is not derived from real census data.</li>
-        <li>IPF mode will match the marginals you upload (to numerical tolerance). For large multi-way tables (product of categories > ~200,000 cells) your phone may struggle — split axes or reduce categories.</li>
-        <li>If IPF fails to converge quickly, try increasing max iterations or inspecting uploaded marginals for zeros or inconsistent totals.</li>
-      </ul>
-    </div>
-
-    <footer>Save this file as <code>index.html</code> and open it on your phone. © 2025</footer>
+<div class="wrap">
+  <div class="card">
+    <h1>Population % Simulator</h1>
+    <div class="muted small">Ask "What percentage of X wear Y daily?" — the site uses editable priors + optional evidence to produce estimates and uncertainty.</div>
   </div>
 
+  <div class="card">
+    <label>Natural-language question (e.g. "What % of men wear a tank top daily?")</label>
+    <input id="question" placeholder='e.g. "What % of men wear a tank top daily?"' />
+
+    <div class="row" style="margin-top:8px">
+      <div class="col">
+        <label>Detected group (you can edit)</label>
+        <input id="group" />
+      </div>
+      <div class="col">
+        <label>Detected behaviour / item (edit)</label>
+        <input id="behavior" />
+      </div>
+      <div class="col">
+        <label>Mode</label>
+        <select id="mode">
+          <option value="estimate">Estimate (use priors)</option>
+          <option value="simulate">Simulate population sample</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-top:10px" class="small muted">
+      We ship the page with **editable priors** (illustrative). Add your survey evidence below to update the estimate.
+    </div>
+
+    <div style="margin-top:12px" class="row">
+      <button id="askBtn" class="btn">Get estimate</button>
+      <button id="addEvidenceBtn" class="btn" style="background:#10b981">Add evidence (survey)</button>
+      <button id="exportBtn" class="btn" style="background:#475569">Export CSV</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Data & Priors (editable)</h3>
+    <div class="muted small">Priors are Beta(alpha,beta)-style counts (interpretable as a prior sample). Edit them to reflect better knowledge.</div>
+
+    <div style="margin-top:8px" class="row">
+      <div class="col">
+        <label>Group key (examples: male,female,all)</label>
+        <input id="priorkey" />
+      </div>
+      <div class="col">
+        <label>Item key (examples: tank_top_daily,hat_daily)</label>
+        <input id="priorkey_item" />
+      </div>
+      <div class="col">
+        <label>Alpha (prior successes)</label>
+        <input id="priorAlpha" type="number" />
+      </div>
+      <div class="col">
+        <label>Beta (prior failures)</label>
+        <input id="priorBeta" type="number" />
+      </div>
+    </div>
+
+    <div style="margin-top:8px">
+      <button id="savePriorBtn" class="btn">Save prior</button>
+      <div id="priorsList" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Evidence (surveys you add)</h3>
+    <div class="small muted">Add counts from surveys (e.g., "120 of 1000 men reported wearing tank top daily"). These will update the posterior.</div>
+
+    <div class="row" style="margin-top:8px">
+      <div class="col">
+        <label>Source name</label>
+        <input id="evSource" placeholder="e.g., SurveyXYZ 2023" />
+      </div>
+      <div class="col">
+        <label>Group key</label>
+        <input id="evGroup" placeholder="male" />
+      </div>
+      <div class="col">
+        <label>Item key</label>
+        <input id="evItem" placeholder="tank_top_daily" />
+      </div>
+      <div class="col">
+        <label>Successes (those who wear)</label>
+        <input id="evSuccess" type="number" placeholder="e.g. 120" />
+      </div>
+      <div class="col">
+        <label>Trials (sample size)</label>
+        <input id="evTrials" type="number" placeholder="e.g. 1000" />
+      </div>
+    </div>
+
+    <div style="margin-top:8px">
+      <button id="saveEvidenceBtn" class="btn">Add evidence</button>
+      <div id="evidenceList" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Results</h3>
+    <div id="resultSummary" class="muted small">No estimate yet.</div>
+
+    <div class="results" id="resultTiles"></div>
+
+    <div style="margin-top:12px">
+      <h4>Posterior samples (first 200)</h4>
+      <pre id="posteriorOut">—</pre>
+    </div>
+  </div>
+
+  <footer>
+    <div class="small muted">This is an offline-first estimator. To improve realism: add authoritative surveys as evidence, or replace priors with meta-analytic priors from papers.</div>
+  </footer>
+</div>
+
 <script>
-/* ---------- Utilities ---------- */
+/* ---------- Core model ---------- */
 
-// simple CSV parser supporting quoted fields
-function parseCSV(text) {
-  const rows = [];
-  let row = [];
-  let cur = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i+1];
-    if (ch === '"' ) {
-      if (inQuotes && next === '"') { cur += '"'; i++; continue; } // escaped quote
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (!inQuotes && (ch === '\n' || ch === '\r')) {
-      if (ch === '\r' && text[i+1] === '\n') { i++; } // windows newline
-      row.push(cur); cur = '';
-      rows.push(row); row = [];
-      continue;
-    }
-    if (!inQuotes && ch === ',') {
-      row.push(cur); cur = '';
-      continue;
-    }
-    cur += ch;
-  }
-  // push last field
-  if (inQuotes) {
-    // fallback: unmatched quotes, still push
-    row.push(cur);
-    rows.push(row);
-  } else {
-    if (cur !== '' || row.length > 0) {
-      row.push(cur); rows.push(row);
-    }
-  }
-  // remove any empty trailing rows
-  while (rows.length && rows[rows.length-1].every(cell => cell === '')) rows.pop();
-  return rows;
-}
-
-// convert array of objects -> CSV
-function toCSV(rows) {
-  if (!rows || rows.length === 0) return '';
-  const keys = Object.keys(rows[0]);
-  const lines = [keys.join(',')];
-  for (const r of rows) {
-    const line = keys.map(k => {
-      const cell = r[k] == null ? '' : String(r[k]);
-      if (cell.includes('"') || cell.includes(',') || cell.includes('\n')) {
-        return '"' + cell.replace(/"/g,'""') + '"';
-      }
-      return cell;
-    }).join(',');
-    lines.push(line);
-  }
-  return lines.join('\n');
-}
-
-// random helpers
-function randChoice(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
-function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
-
-/* ---------- Demo generator ---------- */
-
-const REGIONS = ['Attica','Central Macedonia','Crete','Peloponnese','Thessaly','Epirus'];
-const EDUC = ['Primary','Secondary','Tertiary','Postgraduate'];
-
-function demoGenerateRow() {
-  const age = randInt(18, 90);
-  const sex = Math.random() < 0.49 ? 'Male' : (Math.random() < 0.98 ? 'Female' : 'Other');
-  // income: log-normal-ish
-  const base = 18000 + Math.max(0,(age-25))*800;
-  const income = Math.max(1000, Math.round(Math.exp(Math.log(Math.max(10000,base)) + (Math.random()-0.5)*0.8)));
-  const region = randChoice(REGIONS);
-  const education = (() => {
-    const p = Math.random();
-    if (p < 0.12) return 'Primary';
-    if (p < 0.57) return 'Secondary';
-    if (p < 0.90) return 'Tertiary';
-    return 'Postgraduate';
-  })();
-  return {
-    id: Math.random().toString(36).slice(2,10),
-    age: age,
-    sex: sex,
-    education: education,
-    income: income,
-    region: region,
-    created_at: new Date().toISOString()
-  };
-}
-
-/* ---------- IPF Implementation ----------
-  Expects marginals: a map axis -> { categories: [..], values: [..] }
-  We build a flat Float64Array table, with precomputed strides.
-  We iterate scaling by axis until convergence or maxIter.
+/*
+ Approach:
+ - Store priors per (group,item) as Beta(alpha,beta).
+ - Evidence is counts (successes, trials) that update posterior: Beta(alpha+succ, beta+(trials-succ))
+ - For estimate: sample many draws from Beta posterior and report mean and 95% credible interval.
+ - For simulation mode: given population size N (default 10000), simulate how many in that population wear the item.
 */
 
-function computeStrides(sizes) {
-  const n = sizes.length;
-  const strides = new Array(n);
-  let prod = 1;
-  for (let i = n-1; i >= 0; i--) {
-    strides[i] = prod;
-    prod *= sizes[i];
+// Basic storage (persist in localStorage)
+const STORAGE_KEYS = { PRIORS:'ps_priors_v1', EVIDENCE:'ps_evidence_v1' };
+
+function loadPriors(){
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.PRIORS) || '{}'); } catch(e){ return {}; }
+}
+function savePriors(obj){ localStorage.setItem(STORAGE_KEYS.PRIORS, JSON.stringify(obj)); }
+function loadEvidence(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.EVIDENCE) || '[]'); } catch(e){ return []; }
+}
+function saveEvidence(arr){ localStorage.setItem(STORAGE_KEYS.EVIDENCE, JSON.stringify(arr)); }
+
+// Default example priors (explicitly illustrative; replace with sourced data)
+const defaultPriors = {
+  // keys: "<group>::<item>"
+  "male::tank_top_daily": {alpha:12, beta:88, note:"illustrative prior (12%)"},
+  "female::tank_top_daily": {alpha:8, beta:92, note:"illustrative prior (8%)"},
+  "all::tank_top_daily": {alpha:10, beta:90, note:"illustrative prior (10%)"}
+};
+
+function ensurePriors() {
+  const p = loadPriors();
+  let modified=false;
+  for(const k of Object.keys(defaultPriors)){
+    if(!p[k]){ p[k]=defaultPriors[k]; modified=true; }
   }
-  return strides;
+  if(modified) savePriors(p);
+  return p;
 }
 
-function product(arr) {
-  return arr.reduce((s,x) => s*x, 1);
+ensurePriors();
+
+/* ---------- Stats helpers ---------- */
+
+// draw one sample from Beta(a,b) using Gamma sampling: X~Gamma(a,1)/(Gamma(a,1)+Gamma(b,1))
+function randGamma(shape){
+  // Marsaglia and Tsang method for k>0
+  if(shape < 1) {
+    // boost: sample for shape+1 then scale
+    const u = Math.random();
+    return randGamma(1+shape) * Math.pow(u, 1/shape);
+  }
+  const d = shape - 1/3;
+  const c = 1 / Math.sqrt(9*d);
+  while(true){
+    let x, v;
+    do { x = normalRandom(); v = 1 + c * x; } while (v <= 0);
+    v = v*v*v;
+    const u = Math.random();
+    if (u < 1 - 0.0331 * x * x * x * x) return d * v;
+    if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+  }
+}
+function normalRandom() {
+  // Box-Muller
+  let u = 0, v = 0;
+  while(u===0) u = Math.random();
+  while(v===0) v = Math.random();
+  return Math.sqrt(-2.0*Math.log(u))*Math.cos(2.0*Math.PI*v);
+}
+function betaSample(a,b){
+  const ga = randGamma(a);
+  const gb = randGamma(b);
+  return ga / (ga + gb);
 }
 
-function ipfSolve(marginals, maxIter=500, tol=1e-6) {
-  // marginals: {axis1:{categories:[],values:[]}, axis2:...}
-  const axes = Object.keys(marginals);
-  const sizes = axes.map(ax => marginals[ax].categories.length);
-  const totalCells = product(sizes);
-  if (totalCells === 0) throw new Error('Empty marginal categories');
-  if (totalCells > 300000) {
-    throw new Error('Table too large ('+totalCells+' cells). Reduce categories or axes to avoid freezing.');
-  }
-  const strides = computeStrides(sizes);
-  const table = new Float64Array(totalCells);
-  for (let i=0;i<totalCells;i++) table[i] = 1.0;
-
-  // prepare marginal arrays
-  const margArrays = axes.map(ax => marginals[ax].values.map(v => Number(v)));
-
-  for (let it=0; it<maxIter; it++) {
-    let maxChange = 0;
-    for (let axisIdx=0; axisIdx<axes.length; axisIdx++) {
-      const size = sizes[axisIdx];
-      const current = new Float64Array(size);
-      // accumulate current marginals
-      for (let idx=0; idx<totalCells; idx++) {
-        const pos = Math.floor(idx / strides[axisIdx]) % size;
-        current[pos] += table[idx];
-      }
-      // compute ratios
-      const target = margArrays[axisIdx];
-      const ratio = new Array(size);
-      for (let j=0;j<size;j++) {
-        if (current[j] <= 0) ratio[j] = 0; else ratio[j] = target[j] / current[j];
-        maxChange = Math.max(maxChange, Math.abs(ratio[j]-1));
-        if (!isFinite(ratio[j])) ratio[j] = 0;
-      }
-      // apply ratios
-      for (let idx=0; idx<totalCells; idx++) {
-        const pos = Math.floor(idx / strides[axisIdx]) % size;
-        table[idx] *= ratio[pos];
-      }
-    }
-    if (maxChange < tol) break;
-    // continue
-  }
-  return {table,axes,sizes,strides};
+// sample array of n draws
+function betaSamples(a,b,n){
+  const out = new Float64Array(n);
+  for(let i=0;i<n;i++) out[i] = betaSample(a,b);
+  return out;
 }
 
-function sampleFromTable(tableObj, categoriesMap, n) {
-  const table = tableObj.table;
-  const axes = tableObj.axes;
-  const sizes = tableObj.sizes;
-  const strides = tableObj.strides;
-  const N = table.length;
-  const total = table.reduce((s,x)=>s+x,0);
-  if (total <= 0) throw new Error('Table total weight <= 0, check marginals');
-  // build cumulative
-  const cum = new Float64Array(N);
-  let c = 0;
-  for (let i=0;i<N;i++) { c += table[i]; cum[i] = c; }
-  const rows = [];
-  for (let k=0;k<n;k++) {
-    const r = Math.random()*c;
-    // binary search
-    let lo=0, hi=N-1;
-    while (lo<hi) {
-      const mid = (lo+hi)>>1;
-      if (cum[mid] >= r) hi = mid; else lo = mid+1;
-    }
-    const idx = lo;
-    // decode multi-index
-    let rem = idx;
-    const row = {};
-    for (let a=0;a<axes.length;a++) {
-      const size = sizes[a];
-      const pos = Math.floor(rem / strides[a]) % size;
-      row[axes[a]] = categoriesMap[axes[a]][pos];
-      // no need to reduce rem here; next divide uses same rem but with next stride
-    }
-    rows.push(row);
-  }
-  return rows;
+// compute percentiles
+function pctile(arr, p){
+  const a = Array.from(arr).sort((x,y)=>x-y);
+  const idx = Math.max(0, Math.min(a.length-1, Math.floor((p/100)*(a.length-1))));
+  return a[idx];
 }
+
+// mean
+function mean(arr){ let s=0; for(let v of arr) s+=v; return s/arr.length; }
 
 /* ---------- UI wiring ---------- */
 
-const fileInput = document.getElementById('file');
-const modeEl = document.getElementById('mode');
-const nrowsEl = document.getElementById('nrows');
-const generateBtn = document.getElementById('generateBtn');
-const downloadBtn = document.getElementById('downloadBtn');
-const copyBtn = document.getElementById('copyBtn');
-const outPre = document.getElementById('out');
-const tableWrap = document.getElementById('tableWrap');
-const statsEl = document.getElementById('stats');
-const warnArea = document.getElementById('warnArea');
+const qEl = document.getElementById('question');
+const groupEl = document.getElementById('group');
+const behaviorEl = document.getElementById('behavior');
+const askBtn = document.getElementById('askBtn');
+const addEvidenceBtn = document.getElementById('addEvidenceBtn');
+const exportBtn = document.getElementById('exportBtn');
 
-let latestRows = null;
+const priorkeyEl = document.getElementById('priorkey');
+const priorkeyItemEl = document.getElementById('priorkey_item');
+const priorAlphaEl = document.getElementById('priorAlpha');
+const priorBetaEl = document.getElementById('priorBeta');
+const savePriorBtn = document.getElementById('savePriorBtn');
+const priorsListDiv = document.getElementById('priorsList');
 
-generateBtn.addEventListener('click', async () => {
-  warnArea.innerHTML = '';
-  const mode = modeEl.value;
-  const n = Math.max(1, Math.min(100000, Number(nrowsEl.value) || 100));
-  if (mode === 'demo') {
-    const rows = [];
-    for (let i=0;i<n;i++) rows.push(demoGenerateRow());
-    latestRows = rows;
-    renderOutput(rows);
-    return;
-  }
+const evSourceEl = document.getElementById('evSource');
+const evGroupEl = document.getElementById('evGroup');
+const evItemEl = document.getElementById('evItem');
+const evSuccessEl = document.getElementById('evSuccess');
+const evTrialsEl = document.getElementById('evTrials');
+const saveEvidenceBtn = document.getElementById('saveEvidenceBtn');
+const evidenceListDiv = document.getElementById('evidenceList');
 
-  // IPF mode
-  const file = fileInput.files[0];
-  if (!file) {
-    alert('Please upload a marginals CSV (tall form: axis,category,value).');
-    return;
-  }
-  const text = await file.text();
-  let parsed;
-  try { parsed = parseCSV(text); } catch(e){ alert('CSV parse failed: '+e); return; }
-  if (parsed.length < 2) { alert('CSV appears empty or only headers'); return; }
-  const headers = parsed[0].map(h => h.trim().toLowerCase());
-  const axisIdx = headers.indexOf('axis'), catIdx = headers.indexOf('category'), valIdx = headers.indexOf('value');
-  if (axisIdx === -1 || catIdx === -1 || valIdx === -1) {
-    alert('CSV headers must include: axis, category, value (case-insensitive).');
-    return;
-  }
-  // build tall mapping axis -> { categories: [], values: [] } with aggregation if duplicates
-  const marginals = {};
-  for (let i=1;i<parsed.length;i++) {
-    const row = parsed[i];
-    if (row.length === 0) continue;
-    const ax = (row[axisIdx] || '').trim();
-    const cat = (row[catIdx] || '').trim();
-    let val = row[valIdx] || '0';
-    val = Number(val.replace(/,/g,'')) || 0;
-    if (!ax || !cat) continue;
-    if (!marginals[ax]) marginals[ax] = { categories: [], map: {} };
-    if (!marginals[ax].map[cat]) {
-      marginals[ax].map[cat] = val;
-      marginals[ax].categories.push(cat);
-    } else {
-      marginals[ax].map[cat] += val; // aggregate duplicates
-    }
-  }
-  // transform to arrays
-  const prepared = {};
-  for (const ax of Object.keys(marginals)) {
-    const entry = marginals[ax];
-    prepared[ax] = { categories: entry.categories.slice(), values: entry.categories.map(c => entry.map[c]) };
-  }
+const resultSummary = document.getElementById('resultSummary');
+const resultTiles = document.getElementById('resultTiles');
+const posteriorOut = document.getElementById('posteriorOut');
 
-  // quick check of sizes
-  const axes = Object.keys(prepared);
-  const sizes = axes.map(a => prepared[a].categories.length);
-  const totalCells = sizes.reduce((s,x)=>s*x,1);
-  if (totalCells > 300000) {
-    warnArea.innerHTML = '<div class="warning">Warning: the multi-way table has ' + totalCells + ' cells — this may be slow or crash on phones. Reduce categories or axes and try again.</div>';
+function renderPriors(){
+  const p = loadPriors();
+  priorsListDiv.innerHTML = '<div class="small muted">Saved priors:</div>';
+  const ul = document.createElement('div');
+  ul.style.marginTop='8px';
+  for(const k of Object.keys(p)){
+    const d = p[k];
+    const row = document.createElement('div');
+    row.className='small';
+    row.innerHTML = `<strong>${k}</strong>: alpha=${d.alpha}, beta=${d.beta} ${d.note?'<span class="muted">('+d.note+')</span>':''} <button data-k="${k}" style="margin-left:8px">Use</button>`;
+    const btn = row.querySelector('button');
+    btn.onclick = ()=> { const parts = k.split('::'); priorkeyEl.value=parts[0]||''; priorkeyItemEl.value=parts[1]||''; priorAlphaEl.value=d.alpha; priorBetaEl.value=d.beta; };
+    ul.appendChild(row);
   }
-
-  try {
-    const tableObj = ipfSolve(prepared, 500, 1e-6);
-    const rows = sampleFromTable(tableObj, Object.fromEntries(Object.keys(prepared).map(k=>[k,prepared[k].categories])), n);
-    latestRows = rows;
-    renderOutput(rows);
-  } catch (err) {
-    alert('IPF failed: ' + err.message);
-    console.error(err);
-  }
-});
-
-// render generated rows: pre + table
-function renderOutput(rows) {
-  if (!rows || rows.length === 0) {
-    outPre.textContent = 'No rows produced';
-    tableWrap.innerHTML = '';
-    statsEl.textContent = '0 rows';
-    return;
-  }
-  latestRows = rows;
-  outPre.textContent = JSON.stringify(rows.slice(0,50), null, 2) + (rows.length > 50 ? '\n\n... ('+rows.length+' rows total, previewed 50)':'');
-
-  // build small HTML table for first 100 rows
-  const previewCount = Math.min(100, rows.length);
-  const keys = Object.keys(rows[0]);
-  const table = document.createElement('table');
-  const thead = document.createElement('thead');
-  const trh = document.createElement('tr');
-  for (const k of keys) { const th = document.createElement('th'); th.textContent = k; trh.appendChild(th); }
-  thead.appendChild(trh); table.appendChild(thead);
-  const tbody = document.createElement('tbody');
-  for (let i=0;i<previewCount;i++) {
-    const tr = document.createElement('tr');
-    for (const k of keys) {
-      const td = document.createElement('td');
-      td.textContent = rows[i][k];
-      tr.appendChild(td);
-    }
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
-  tableWrap.innerHTML = ''; tableWrap.appendChild(table);
-
-  statsEl.textContent = `${rows.length} rows generated • previewing ${previewCount}.`;
+  priorsListDiv.appendChild(ul);
 }
 
-downloadBtn.addEventListener('click', () => {
-  if (!latestRows) { alert('No generated rows to download'); return; }
-  const csv = toCSV(latestRows);
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'synthetic_population.csv';
-  document.body.appendChild(a); a.click(); a.remove();
-});
+function renderEvidence(){
+  const ev = loadEvidence();
+  evidenceListDiv.innerHTML = '<div class="small muted">Saved evidence:</div>';
+  const ul = document.createElement('div');
+  ul.style.marginTop='8px';
+  ev.forEach((e,i)=>{
+    const row = document.createElement('div');
+    row.className='small';
+    row.innerHTML = `<strong>[${i+1}]</strong> ${e.source} • ${e.group} / ${e.item} → ${e.success}/${e.trials} (${((e.success/e.trials)*100).toFixed(2)}%) <button data-i="${i}" style="margin-left:8px">Remove</button>`;
+    row.querySelector('button').onclick = ()=>{ ev.splice(i,1); saveEvidence(ev); renderEvidence(); };
+    ul.appendChild(row);
+  });
+  evidenceListDiv.appendChild(ul);
+}
 
-copyBtn.addEventListener('click', async () => {
-  if (!latestRows) { alert('No generated rows to copy'); return; }
-  try {
-    await navigator.clipboard.writeText(JSON.stringify(latestRows.slice(0,1000), null, 2));
-    alert('Copied JSON preview to clipboard (first 1000 rows or fewer).');
-  } catch (e) {
-    alert('Copy failed, please allow clipboard permissions or use Download.');
+renderPriors(); renderEvidence();
+
+/* ---------- Natural language parse (very simple) ---------- */
+
+function parseQuestion(q){
+  q = (q||'').toLowerCase();
+  // group parse
+  let group = null;
+  if(q.includes('men') || q.includes('males') || q.includes('male')) group='male';
+  else if(q.includes('women') || q.includes('females') || q.includes('female')) group='female';
+  else group='all';
+  // behavior parse - look for tank top synonyms
+  let item = null;
+  if(q.includes('tank top') || q.includes('sleeveless') || q.includes('vest top') || q.includes('singlet')) item='tank_top_daily';
+  else if(q.includes('hat') || q.includes('cap')) item='hat_daily';
+  else item='generic_item_daily';
+  return {group, item};
+}
+
+/* ---------- Core estimate function ---------- */
+
+function keyFor(group,item){ return `${group}::${item}`; }
+
+function getPriorAlphaBeta(group,item){
+  const p = loadPriors();
+  const k = keyFor(group,item);
+  if(p[k]) return [Number(p[k].alpha)||1, Number(p[k].beta)||1];
+  // fallback to 'all::item' then generic
+  if(p[`all::${item}`]) return [Number(p[`all::${item}`].alpha)||1, Number(p[`all::${item}`].beta)||1];
+  return [1,1]; // vague uniform prior
+}
+
+function gatherEvidenceFor(group,item){
+  const ev = loadEvidence();
+  let succ=0, trials=0;
+  const matches=[];
+  for(const e of ev){
+    if(e.group===group && e.item===item){
+      succ += Number(e.success); trials += Number(e.trials); matches.push(e);
+    }
   }
-});
+  return {succ, trials, matches};
+}
 
-// small convenience: sample CSV templates for testing
-// (not required but handy)
-(function addSampleTemplate(){
-  const help = document.createElement('div');
-  help.className = 'muted';
-  help.style.marginTop = '10px';
-  help.innerHTML = '<strong>Sample IPF CSV format:</strong><br>axis,category,value<br>age,18-24,120000<br>age,25-34,220000<br>sex,Male,200000<br>sex,Female,240000<br>region,Attica,180000<br>region,Crete,60000';
-  document.querySelector('.card').appendChild(help);
-})();
+function estimatePosterior(group,item, samples=20000){
+  const [a0,b0] = getPriorAlphaBeta(group,item);
+  const {succ,trials,matches} = gatherEvidenceFor(group,item);
+  const aPost = a0 + succ;
+  const bPost = b0 + (trials - succ);
+  // sample
+  const draws = betaSamples(Math.max(0.0001,aPost), Math.max(0.0001,bPost), samples);
+  const meanVal = mean(draws);
+  const p025 = pctile(draws,2.5);
+  const p975 = pctile(draws,97.5);
+  return {a0,b0,succ,trials,aPost,bPost,mean:meanVal,ci:[p025,p975],samples:draws,matchedEvidence:matches};
+}
+
+/* ---------- UI actions ---------- */
+
+askBtn.onclick = ()=>{
+  const q = qEl.value.trim();
+  const parsed = parseQuestion(q);
+  // allow user override if they typed fields
+  const group = (groupEl.value.trim() || parsed.group || 'all');
+  const item = (behaviorEl.value.trim() || parsed.item || 'generic_item_daily');
+  groupEl.value = group; behaviorEl.value = item;
+
+  const mode = document.getElementById('mode').value;
+  const est = estimatePosterior(group,item,12000);
+
+  // render summary
+  resultSummary.innerHTML = `<strong>Estimate for:</strong> ${group} • ${item} — posterior mean=${(est.mean*100).toFixed(2)}% • 95% CI ${(est.ci[0]*100).toFixed(2)}%–${(est.ci[1]*100).toFixed(2)}%`;
+  resultTiles.innerHTML = '';
+  const tileMean = document.createElement('div'); tileMean.className='tile';
+  tileMean.innerHTML = `<div class="small">Posterior mean</div><div style="font-size:20px"><strong>${(est.mean*100).toFixed(2)}%</strong></div>`;
+  const tileCI = document.createElement('div'); tileCI.className='tile';
+  tileCI.innerHTML = `<div class="small">95% credible interval</div><div style="font-size:16px">${(est.ci[0]*100).toFixed(2)}% — ${(est.ci[1]*100).toFixed(2)}%</div>`;
+  const tileData = document.createElement('div'); tileData.className='tile';
+  tileData.innerHTML = `<div class="small">Prior (α,β)</div><div style="font-size:14px">${est.a0}, ${est.b0}</div><div class="small" style="margin-top:6px">Evidence: ${est.succ}/${est.trials} (from ${est.matchedEvidence.length} sources)</div>`;
+  resultTiles.appendChild(tileMean); resultTiles.appendChild(tileCI); resultTiles.appendChild(tileData);
+
+  // posterior sample preview
+  const preview = Array.from(est.samples.slice(0,200)).map(x=> (x*100).toFixed(3)+'%');
+  posteriorOut.textContent = preview.join(', ');
+};
+
+savePriorBtn.onclick = ()=>{
+  const group = (priorkeyEl.value||'').trim();
+  const item = (priorkeyItemEl.value||'').trim();
+  const a = Math.max(0, Number(priorAlphaEl.value||0));
+  const b = Math.max(0, Number(priorBetaEl.value||0));
+  if(!group || !item || a<=0 || b<=0){ alert('Please fill group, item, and positive alpha/beta'); return; }
+  const p = loadPriors();
+  p[`${group}::${item}`] = {alpha:a,beta:b,note:'user-saved'};
+  savePriors(p); renderPriors();
+  alert('Saved prior for '+group+'::'+item);
+};
+
+saveEvidenceBtn.onclick = ()=>{
+  const src = (evSourceEl.value||'').trim();
+  const group = (evGroupEl.value||'').trim();
+  const item = (evItemEl.value||'').trim();
+  const succ = Number(evSuccessEl.value||0);
+  const trials = Number(evTrialsEl.value||0);
+  if(!group || !item || trials<=0 || succ<0 || succ>trials){ alert('Fill valid evidence (0 <= successes <= trials, trials>0)'); return; }
+  const ev = loadEvidence();
+  ev.push({source:src||'user', group, item, success:succ, trials:trials, when:(new Date()).toISOString()});
+  saveEvidence(ev); renderEvidence();
+  alert('Added evidence');
+};
+
+// export results (priors + evidence) as CSV
+exportBtn.onclick = ()=>{
+  const p = loadPriors(); const ev = loadEvidence();
+  let text = 'type,key,alpha,beta,note\n';
+  for(const k of Object.keys(p)) text += `prior,${k},${p[k].alpha},${p[k].beta},"${(p[k].note||'')}"\n`;
+  text += '\nsource,group,item,success,trials,when\n';
+  for(const e of ev) text += `${e.source},${e.group},${e.item},${e.success},${e.trials},${e.when}\n`;
+  const blob = new Blob([text], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'simulator_data_export.csv'; document.body.appendChild(a); a.click(); a.remove();
+};
+
+// quick "Add evidence" button
+addEvidenceBtn.onclick = ()=> {
+  // parse current question & prefill
+  const parsed = parseQuestion(qEl.value||'');
+  evGroupEl.value = parsed.group;
+  evItemEl.value = parsed.item;
+  // open evidence card by scrolling
+  evSourceEl.scrollIntoView({behavior:'smooth'});
+};
+
 </script>
 </body>
 </html>
