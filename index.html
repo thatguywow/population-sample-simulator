@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Population Simulator — Static</title>
+  <style>
+    :root{
+      --bg:#f6f7fb; --card:#ffffff; --muted:#6b7280; --accent:#0f62fe;
+      --radius:10px; --pad:14px;
+    }
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;background:var(--bg);color:#0f1724}
+    .wrap{max-width:980px;margin:28px auto;padding:16px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    header h1{font-size:20px;margin:0}
+    .card{background:var(--card);border-radius:var(--radius);padding:var(--pad);box-shadow:0 6px 18px rgba(16,24,40,0.06);margin-bottom:12px}
+    label{display:block;margin-top:8px;font-size:14px;color:#0f1724}
+    input[type="number"], select, input[type="file"], textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #e6e9ef;margin-top:6px;box-sizing:border-box}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .btn{padding:10px 14px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+    .btn.secondary{background:#10b981}
+    .muted{color:var(--muted);font-size:13px}
+    pre#out{background:#0b1220;color:#e6eef8;padding:12px;border-radius:8px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    table th,table td{padding:8px;border-bottom:1px solid #f1f5f9;text-align:left}
+    .flex-sb{display:flex;justify-content:space-between;align-items:center}
+    .warning{background:#fff4e5;color:#7a4900;padding:8px;border-radius:8px;margin-top:8px}
+    footer{margin-top:18px;text-align:center;color:var(--muted);font-size:13px}
+    @media (max-width:540px){header h1{font-size:18px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Population Simulator (static)</h1>
+      <div class="muted">Client-side demo • No backend required</div>
+    </header>
+
+    <div class="card">
+      <div class="flex-sb">
+        <div>
+          <label>Mode</label>
+          <select id="mode">
+            <option value="demo">Demo generator (browser)</option>
+            <option value="ipf">IPF / Raking (upload marginals CSV)</option>
+          </select>
+        </div>
+
+        <div style="min-width:160px">
+          <label>Rows to generate</label>
+          <input type="number" id="nrows" min="1" max="100000" value="500" />
+        </div>
+      </div>
+
+      <label style="margin-top:12px">Upload CSV (for IPF)
+        <input id="file" type="file" accept=".csv" />
+      </label>
+      <div class="muted" style="margin-top:6px">
+        IPF CSV must be <strong>tall</strong> with headers: <code>axis,category,value</code> (case-insensitive).
+        Example row: <code>age,25-34,220000</code>
+      </div>
+
+      <div class="controls">
+        <button id="generateBtn" class="btn">Generate</button>
+        <button id="downloadBtn" class="btn secondary">Download CSV</button>
+        <button id="copyBtn" class="btn" style="background:#475569">Copy JSON</button>
+      </div>
+
+      <div id="warnArea"></div>
+    </div>
+
+    <div class="card">
+      <h3>Generated preview</h3>
+      <div id="stats" class="muted" style="margin-bottom:8px">No generation yet.</div>
+      <pre id="out">No output yet.</pre>
+      <div id="tableWrap" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <h3>Notes & tips</h3>
+      <ul class="muted">
+        <li>Demo mode produces plausible-looking rows but is not derived from real census data.</li>
+        <li>IPF mode will match the marginals you upload (to numerical tolerance). For large multi-way tables (product of categories > ~200,000 cells) your phone may struggle — split axes or reduce categories.</li>
+        <li>If IPF fails to converge quickly, try increasing max iterations or inspecting uploaded marginals for zeros or inconsistent totals.</li>
+      </ul>
+    </div>
+
+    <footer>Save this file as <code>index.html</code> and open it on your phone. © 2025</footer>
+  </div>
+
+<script>
+/* ---------- Utilities ---------- */
+
+// simple CSV parser supporting quoted fields
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i+1];
+    if (ch === '"' ) {
+      if (inQuotes && next === '"') { cur += '"'; i++; continue; } // escaped quote
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (!inQuotes && (ch === '\n' || ch === '\r')) {
+      if (ch === '\r' && text[i+1] === '\n') { i++; } // windows newline
+      row.push(cur); cur = '';
+      rows.push(row); row = [];
+      continue;
+    }
+    if (!inQuotes && ch === ',') {
+      row.push(cur); cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  // push last field
+  if (inQuotes) {
+    // fallback: unmatched quotes, still push
+    row.push(cur);
+    rows.push(row);
+  } else {
+    if (cur !== '' || row.length > 0) {
+      row.push(cur); rows.push(row);
+    }
+  }
+  // remove any empty trailing rows
+  while (rows.length && rows[rows.length-1].every(cell => cell === '')) rows.pop();
+  return rows;
+}
+
+// convert array of objects -> CSV
+function toCSV(rows) {
+  if (!rows || rows.length === 0) return '';
+  const keys = Object.keys(rows[0]);
+  const lines = [keys.join(',')];
+  for (const r of rows) {
+    const line = keys.map(k => {
+      const cell = r[k] == null ? '' : String(r[k]);
+      if (cell.includes('"') || cell.includes(',') || cell.includes('\n')) {
+        return '"' + cell.replace(/"/g,'""') + '"';
+      }
+      return cell;
+    }).join(',');
+    lines.push(line);
+  }
+  return lines.join('\n');
+}
+
+// random helpers
+function randChoice(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
+function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+/* ---------- Demo generator ---------- */
+
+const REGIONS = ['Attica','Central Macedonia','Crete','Peloponnese','Thessaly','Epirus'];
+const EDUC = ['Primary','Secondary','Tertiary','Postgraduate'];
+
+function demoGenerateRow() {
+  const age = randInt(18, 90);
+  const sex = Math.random() < 0.49 ? 'Male' : (Math.random() < 0.98 ? 'Female' : 'Other');
+  // income: log-normal-ish
+  const base = 18000 + Math.max(0,(age-25))*800;
+  const income = Math.max(1000, Math.round(Math.exp(Math.log(Math.max(10000,base)) + (Math.random()-0.5)*0.8)));
+  const region = randChoice(REGIONS);
+  const education = (() => {
+    const p = Math.random();
+    if (p < 0.12) return 'Primary';
+    if (p < 0.57) return 'Secondary';
+    if (p < 0.90) return 'Tertiary';
+    return 'Postgraduate';
+  })();
+  return {
+    id: Math.random().toString(36).slice(2,10),
+    age: age,
+    sex: sex,
+    education: education,
+    income: income,
+    region: region,
+    created_at: new Date().toISOString()
+  };
+}
+
+/* ---------- IPF Implementation ----------
+  Expects marginals: a map axis -> { categories: [..], values: [..] }
+  We build a flat Float64Array table, with precomputed strides.
+  We iterate scaling by axis until convergence or maxIter.
+*/
+
+function computeStrides(sizes) {
+  const n = sizes.length;
+  const strides = new Array(n);
+  let prod = 1;
+  for (let i = n-1; i >= 0; i--) {
+    strides[i] = prod;
+    prod *= sizes[i];
+  }
+  return strides;
+}
+
+function product(arr) {
+  return arr.reduce((s,x) => s*x, 1);
+}
+
+function ipfSolve(marginals, maxIter=500, tol=1e-6) {
+  // marginals: {axis1:{categories:[],values:[]}, axis2:...}
+  const axes = Object.keys(marginals);
+  const sizes = axes.map(ax => marginals[ax].categories.length);
+  const totalCells = product(sizes);
+  if (totalCells === 0) throw new Error('Empty marginal categories');
+  if (totalCells > 300000) {
+    throw new Error('Table too large ('+totalCells+' cells). Reduce categories or axes to avoid freezing.');
+  }
+  const strides = computeStrides(sizes);
+  const table = new Float64Array(totalCells);
+  for (let i=0;i<totalCells;i++) table[i] = 1.0;
+
+  // prepare marginal arrays
+  const margArrays = axes.map(ax => marginals[ax].values.map(v => Number(v)));
+
+  for (let it=0; it<maxIter; it++) {
+    let maxChange = 0;
+    for (let axisIdx=0; axisIdx<axes.length; axisIdx++) {
+      const size = sizes[axisIdx];
+      const current = new Float64Array(size);
+      // accumulate current marginals
+      for (let idx=0; idx<totalCells; idx++) {
+        const pos = Math.floor(idx / strides[axisIdx]) % size;
+        current[pos] += table[idx];
+      }
+      // compute ratios
+      const target = margArrays[axisIdx];
+      const ratio = new Array(size);
+      for (let j=0;j<size;j++) {
+        if (current[j] <= 0) ratio[j] = 0; else ratio[j] = target[j] / current[j];
+        maxChange = Math.max(maxChange, Math.abs(ratio[j]-1));
+        if (!isFinite(ratio[j])) ratio[j] = 0;
+      }
+      // apply ratios
+      for (let idx=0; idx<totalCells; idx++) {
+        const pos = Math.floor(idx / strides[axisIdx]) % size;
+        table[idx] *= ratio[pos];
+      }
+    }
+    if (maxChange < tol) break;
+    // continue
+  }
+  return {table,axes,sizes,strides};
+}
+
+function sampleFromTable(tableObj, categoriesMap, n) {
+  const table = tableObj.table;
+  const axes = tableObj.axes;
+  const sizes = tableObj.sizes;
+  const strides = tableObj.strides;
+  const N = table.length;
+  const total = table.reduce((s,x)=>s+x,0);
+  if (total <= 0) throw new Error('Table total weight <= 0, check marginals');
+  // build cumulative
+  const cum = new Float64Array(N);
+  let c = 0;
+  for (let i=0;i<N;i++) { c += table[i]; cum[i] = c; }
+  const rows = [];
+  for (let k=0;k<n;k++) {
+    const r = Math.random()*c;
+    // binary search
+    let lo=0, hi=N-1;
+    while (lo<hi) {
+      const mid = (lo+hi)>>1;
+      if (cum[mid] >= r) hi = mid; else lo = mid+1;
+    }
+    const idx = lo;
+    // decode multi-index
+    let rem = idx;
+    const row = {};
+    for (let a=0;a<axes.length;a++) {
+      const size = sizes[a];
+      const pos = Math.floor(rem / strides[a]) % size;
+      row[axes[a]] = categoriesMap[axes[a]][pos];
+      // no need to reduce rem here; next divide uses same rem but with next stride
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+/* ---------- UI wiring ---------- */
+
+const fileInput = document.getElementById('file');
+const modeEl = document.getElementById('mode');
+const nrowsEl = document.getElementById('nrows');
+const generateBtn = document.getElementById('generateBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const copyBtn = document.getElementById('copyBtn');
+const outPre = document.getElementById('out');
+const tableWrap = document.getElementById('tableWrap');
+const statsEl = document.getElementById('stats');
+const warnArea = document.getElementById('warnArea');
+
+let latestRows = null;
+
+generateBtn.addEventListener('click', async () => {
+  warnArea.innerHTML = '';
+  const mode = modeEl.value;
+  const n = Math.max(1, Math.min(100000, Number(nrowsEl.value) || 100));
+  if (mode === 'demo') {
+    const rows = [];
+    for (let i=0;i<n;i++) rows.push(demoGenerateRow());
+    latestRows = rows;
+    renderOutput(rows);
+    return;
+  }
+
+  // IPF mode
+  const file = fileInput.files[0];
+  if (!file) {
+    alert('Please upload a marginals CSV (tall form: axis,category,value).');
+    return;
+  }
+  const text = await file.text();
+  let parsed;
+  try { parsed = parseCSV(text); } catch(e){ alert('CSV parse failed: '+e); return; }
+  if (parsed.length < 2) { alert('CSV appears empty or only headers'); return; }
+  const headers = parsed[0].map(h => h.trim().toLowerCase());
+  const axisIdx = headers.indexOf('axis'), catIdx = headers.indexOf('category'), valIdx = headers.indexOf('value');
+  if (axisIdx === -1 || catIdx === -1 || valIdx === -1) {
+    alert('CSV headers must include: axis, category, value (case-insensitive).');
+    return;
+  }
+  // build tall mapping axis -> { categories: [], values: [] } with aggregation if duplicates
+  const marginals = {};
+  for (let i=1;i<parsed.length;i++) {
+    const row = parsed[i];
+    if (row.length === 0) continue;
+    const ax = (row[axisIdx] || '').trim();
+    const cat = (row[catIdx] || '').trim();
+    let val = row[valIdx] || '0';
+    val = Number(val.replace(/,/g,'')) || 0;
+    if (!ax || !cat) continue;
+    if (!marginals[ax]) marginals[ax] = { categories: [], map: {} };
+    if (!marginals[ax].map[cat]) {
+      marginals[ax].map[cat] = val;
+      marginals[ax].categories.push(cat);
+    } else {
+      marginals[ax].map[cat] += val; // aggregate duplicates
+    }
+  }
+  // transform to arrays
+  const prepared = {};
+  for (const ax of Object.keys(marginals)) {
+    const entry = marginals[ax];
+    prepared[ax] = { categories: entry.categories.slice(), values: entry.categories.map(c => entry.map[c]) };
+  }
+
+  // quick check of sizes
+  const axes = Object.keys(prepared);
+  const sizes = axes.map(a => prepared[a].categories.length);
+  const totalCells = sizes.reduce((s,x)=>s*x,1);
+  if (totalCells > 300000) {
+    warnArea.innerHTML = '<div class="warning">Warning: the multi-way table has ' + totalCells + ' cells — this may be slow or crash on phones. Reduce categories or axes and try again.</div>';
+  }
+
+  try {
+    const tableObj = ipfSolve(prepared, 500, 1e-6);
+    const rows = sampleFromTable(tableObj, Object.fromEntries(Object.keys(prepared).map(k=>[k,prepared[k].categories])), n);
+    latestRows = rows;
+    renderOutput(rows);
+  } catch (err) {
+    alert('IPF failed: ' + err.message);
+    console.error(err);
+  }
+});
+
+// render generated rows: pre + table
+function renderOutput(rows) {
+  if (!rows || rows.length === 0) {
+    outPre.textContent = 'No rows produced';
+    tableWrap.innerHTML = '';
+    statsEl.textContent = '0 rows';
+    return;
+  }
+  latestRows = rows;
+  outPre.textContent = JSON.stringify(rows.slice(0,50), null, 2) + (rows.length > 50 ? '\n\n... ('+rows.length+' rows total, previewed 50)':'');
+
+  // build small HTML table for first 100 rows
+  const previewCount = Math.min(100, rows.length);
+  const keys = Object.keys(rows[0]);
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const trh = document.createElement('tr');
+  for (const k of keys) { const th = document.createElement('th'); th.textContent = k; trh.appendChild(th); }
+  thead.appendChild(trh); table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  for (let i=0;i<previewCount;i++) {
+    const tr = document.createElement('tr');
+    for (const k of keys) {
+      const td = document.createElement('td');
+      td.textContent = rows[i][k];
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  tableWrap.innerHTML = ''; tableWrap.appendChild(table);
+
+  statsEl.textContent = `${rows.length} rows generated • previewing ${previewCount}.`;
+}
+
+downloadBtn.addEventListener('click', () => {
+  if (!latestRows) { alert('No generated rows to download'); return; }
+  const csv = toCSV(latestRows);
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'synthetic_population.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+});
+
+copyBtn.addEventListener('click', async () => {
+  if (!latestRows) { alert('No generated rows to copy'); return; }
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(latestRows.slice(0,1000), null, 2));
+    alert('Copied JSON preview to clipboard (first 1000 rows or fewer).');
+  } catch (e) {
+    alert('Copy failed, please allow clipboard permissions or use Download.');
+  }
+});
+
+// small convenience: sample CSV templates for testing
+// (not required but handy)
+(function addSampleTemplate(){
+  const help = document.createElement('div');
+  help.className = 'muted';
+  help.style.marginTop = '10px';
+  help.innerHTML = '<strong>Sample IPF CSV format:</strong><br>axis,category,value<br>age,18-24,120000<br>age,25-34,220000<br>sex,Male,200000<br>sex,Female,240000<br>region,Attica,180000<br>region,Crete,60000';
+  document.querySelector('.card').appendChild(help);
+})();
+</script>
+</body>
+</html>
